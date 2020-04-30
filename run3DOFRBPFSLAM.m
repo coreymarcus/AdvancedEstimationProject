@@ -20,13 +20,13 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) eye(dim*Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = 3.0*eye(Nstate);
+sys.Pnu_n = 1*eye(Nstate);
 sys.Peta = 0.1*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 
 %% Filter Parameters
-Npart = 100;
+Npart = 1000;
 Params.Npart = Npart;
 Params.estimateAngles = false;
 
@@ -34,8 +34,9 @@ Params.estimateAngles = false;
 %% Truth Initialization
 mapBounds = [-10 10];
 muMap = mapBounds(1) + (mapBounds(2) - mapBounds(1))*rand(dim*Nmap,1);
-Pmap0 = 0.1*eye(dim*Nmap);
-mapTruth = mvnrnd(muMap, Pmap0)';
+Pmap0 = 0*eye(dim*Nmap);
+% mapTruth = mvnrnd(muMap, Pmap0)';
+mapTruth = muMap;
 mapTruthX = mapTruth(1:3:(dim*Nmap - 2));
 mapTruthY = mapTruth(2:3:(dim*Nmap - 1));
 mapTruthZ = mapTruth(3:3:(dim*Nmap - 0));
@@ -219,16 +220,6 @@ ylabel('z')
 lims = abs(axis);
 axis([-max(lims(1:2)) max(lims(1:2)) -max(lims(3:4)) max(lims(3:4)) -max(lims(5:6)) max(lims(5:6))]);
 
-%plot location of poseTruth at time 2 compared to all the potentials
-figure
-hold on
-for ii = 1:Npart
-    targ = xHatMat{2}{ii}.xHat_n;
-    scatter3(targ(1),targ(2),targ(3),'b')
-end
-scatter3(poseTruth(1,2),poseTruth(2,2),poseTruth(3,2),'rx')
-title('Particle Positions and Truth')
-
 %plot velocity of truth compared to all particles at time
 timeIdx = L;
 figure
@@ -292,7 +283,7 @@ grid on
 %propagation function
 function xOut = f_n(x, dt)
 
-Phi = [x(4:6); -0.1*x(4:6)];
+Phi = [x(4:6); -.1*x(4:6).^3];
 
 xOut = x + dt*Phi;
 

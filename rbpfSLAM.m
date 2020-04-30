@@ -70,7 +70,7 @@ for ii = 1:Npart
     
     % Draw Particles From Importance Distrubution (Bootstrap - p(x_k|x_k-1)
     mu = sys.f_n(xHat_n_minus);    
-    xHat{ii}.xHat_n = mvnrnd(mu, B_n*sys.Pnu_n*B_n')';
+    xHat{ii}.xHat_n = mvnrnd(mu, 10*B_n*sys.Pnu_n*B_n')';
     
     if(estimateAngles)
         mu_q = mu(7:10);
@@ -89,6 +89,8 @@ end
 wMat = zeros(Npart,1);
 R = sys.Peta;
 
+xHatMat = zeros(13,Npart);
+
 for ii = 1:Npart
     
     % Local variables
@@ -102,32 +104,33 @@ for ii = 1:Npart
     P_l = xHat{ii}.P_l;
     
     % Evauluate the gaussian and update weight
-    p = gaussEval(y, h_n + C*xHat_l, 0*eye(sys.N_l) + C*P_l*C' + D*R*D');
-    xHat{ii}.w = w_minus*p; %equivalent for bootstrap
-    wMat(ii) = xHat{ii}.w;
+    p = gaussEval(y, h_n + C*xHat_l, C*P_l*C' + D*R*D');
+    wMat(ii) = w_minus*p;
+    
+    xHatMat(:,ii) = xHat_n;
     
 end
 
 % Renormalize the weights
 wTrack = sum(wMat);
-for ii = 1:Npart
-    xHat{ii}.w = xHat{ii}.w/wTrack;
-end
+wMat = wMat/wTrack;
+
+Neff = 1/sum(wMat.^2)
 
 if(wTrack == 0)
     disp('Error: Unstable Weight Normalization!')
 end
 
-% %split particles
-% split = sysresample(wMat/norm(wMat));
-% 
-% %duplicate particles
-% xHat = xHat(split);
+%split particles
+split = sysresample(wMat);
 
-% %reassign weights
-% for ii = 1:Npart
-%     xHat{ii}.w = 1/Npart;
-% end
+%resample particles
+xHat = xHat(split);
+
+%reassign weights
+for ii = 1:Npart
+    xHat{ii}.w = 1/Npart;
+end
 
 %resample
 for ii = 1:Npart
@@ -135,29 +138,48 @@ for ii = 1:Npart
     % Local variables
     xHat_n = xHat{ii}.xHat_n;
     xHat_l = xHat{ii}.xHat_l;
-    R = sys.Peta;
+    
+    % Draw Particles
+    mu = xHat_n;
+    mu_q = mu(7:10);
+    xHat{ii}.xHat_n = mvnrnd(mu, .01*(sys.Pnu_n))';
+    
+    %draw random euler angles and create new quaternion
+    randEuler = mvnrnd([0 0 0]',.01*(sys.Peuler));
+    quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
+    xHat{ii}.xHat_n(7:10) = quatmultiply(mu_q', quatNoise);
+    
+    %recalculate locals
+    xHat_n = xHat{ii}.xHat_n;
     h_n = sys.h(xHat_n);
     C = sys.C(xHat_n);
     D = sys.D(xHat_n);
     P_l = xHat{ii}.P_l;
+    w_minus = 1/Npart;
     
-%     % Draw Particles From Importance Distrubution (Bootstrap - p(x_k|x_k-1)
-%     mu = xHat_n;
-%     mu_q = mu(7:10);
-%     xHat{ii}.xHat_n = mvnrnd(mu, sys.Pnu_n)';
-%     
-%     %draw random euler angles and create new quaternion
-%     randEuler = mvnrnd([0 0 0]',sys.Peuler);
-%     quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
-%     xHat{ii}.xHat_n(7:10) = quatmultiply(mu_q', quatNoise);
+    % Evauluate the gaussian and update weight
+    p = gaussEval(y, h_n + C*xHat_l, C*P_l*C' + D*R*D');
+    wMat(ii) = w_minus*p;
     
-    % Update the KFs with the measurement
-    W = C*P_l*C' + D*R*D';
-    K = P_l*C'/W;
-    xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
-    xHat{ii}.P_l = P_l - K*W*K';
+%     % Update the KFs with the measurement
+%     W = C*P_l*C' + D*R*D';
+%     K = P_l*C'/W;
+%     xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
+%     xHat{ii}.P_l = P_l - K*W*K';
     
 end
+
+% Renormalize the weights
+wTrack = sum(wMat);
+wMat = wMat/wTrack;
+
+Neff = 1/sum(wMat.^2)
+
+%reassign weights
+for ii = 1:Npart
+    xHat{ii}.w = wMat(ii);
+end
+
 
 %find the MMSE Estimates
 xMMSE_l = zeros(sys.N_l,1);

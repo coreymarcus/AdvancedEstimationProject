@@ -8,7 +8,7 @@ clc
 
 %% Approximate Covariance for Angular Process Noise
 N = 100000; %number of samples
-Peuler = .1*eye(3);
+Peuler = .0001*eye(3);
 muEuler = [0 0 0]';
 
 quatMat = zeros(N,4);
@@ -23,8 +23,8 @@ covQuat = cov(quatMat);
 % load('quatParams.mat');
 
 %% System
-dt = .1;
-t = 0:dt:0.5;
+dt = .5;
+t = 0:dt:10*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
@@ -39,34 +39,35 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.1*eye(6),covQuat,.1*eye(3));
-sys.Peta = .01*eye(dim*Nmap);
+sys.Pnu_n = blkdiag(.0001*eye(3),.0001*eye(3),covQuat,.0001*eye(3));
+sys.Peta = .0001*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
 
 %% Filter Parameters
-Npart = 100000;
+Npart = 20000;
 Params.Npart = Npart;
+Params.estimateAngles = true;
 
 
 %% Truth Initialization
 mapBounds = [-10 10];
 muMap = mapBounds(1) + (mapBounds(2) - mapBounds(1))*rand(dim*Nmap,1);
-Pmap0 = .01*eye(dim*Nmap);
+Pmap0 = 0*eye(dim*Nmap);
 muTheta0 = zeros(3,1);
 Ptheta0 = Peuler;
-mapTruth = mvnrnd(muMap, 0*Pmap0)';
+mapTruth = mvnrnd(muMap, Pmap0)';
 mapTruthX = mapTruth(1:3:(dim*Nmap - 2));
 mapTruthY = mapTruth(2:3:(dim*Nmap - 1));
 mapTruthZ = mapTruth(3:3:(dim*Nmap - 0));
 muPose = zeros(Nstate,1);
 muPose(4:5) = [1 1]';
-Ppose0 = .1*eye(Nstate);
-thetaTruth0 = mvnrnd(muTheta0,0*Ptheta0)';
+Ppose0 = sys.Pnu_n;
+thetaTruth0 = mvnrnd(muTheta0,Ptheta0)';
 %using a scalar first quaternion representation
 poseTruth0(7:10) = angle2quat(thetaTruth0(1),thetaTruth0(2),thetaTruth0(3))';
-poseTruth0([1:6 11:13]) = mvnrnd(muPose([1:6 11:13]),0*Ppose0([1:6 11:13], [1:6 11:13]))';
+poseTruth0([1:6 11:13]) = mvnrnd(muPose([1:6 11:13]), Ppose0([1:6 11:13], [1:6 11:13]))';
 
 %% Filter Initialization
 
@@ -79,10 +80,10 @@ p0.P_l = Pmap0;
 xHat = cell(Npart,1);
 for ii = 1:Npart
     p0.xHat_n = zeros(Nstate,1);
-    p0.xHat_n([1:6 11:13]) = mvnrnd(muPose([1:6 11:13]),0*Ppose0([1:6 11:13], [1:6 11:13]))';
+    p0.xHat_n([1:6 11:13]) = mvnrnd(muPose([1:6 11:13]), Ppose0([1:6 11:13], [1:6 11:13]))';
     
     %initialize attitude
-    thetaParticle = mvnrnd(muTheta0,0*Ptheta0)';
+    thetaParticle = mvnrnd(muTheta0, Ptheta0)';
     p0.xHat_n(7:10) = angle2quat(thetaParticle(1),thetaParticle(2),thetaParticle(3))';
     
     %assign
@@ -103,15 +104,15 @@ Neff(1) = 1/sum(wMat(:,1).^2);
 for ii = 2:L
     
     %Propagate Dynamics
-    poseTruth(:,ii) = sys.f_n(poseTruth(:,ii-1)) + 0*mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
+    poseTruth(:,ii) = sys.f_n(poseTruth(:,ii-1)) + mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
     
      %draw random euler angles and create new quaternion
-    randEuler = mvnrnd([0 0 0]',0*sys.Peuler);
+    randEuler = mvnrnd([0 0 0]', sys.Peuler);
     quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
     poseTruth(7:10,ii) = quatmultiply(poseTruth(7:10,ii-1)', quatNoise)';
     
     %generate a measurement
-    eta = 0*mvnrnd(zeros(sys.N_l,1),sys.Peta)';
+    eta = mvnrnd(zeros(sys.N_l,1),sys.Peta)';
     y = sys.h(poseTruth(:,ii)) + sys.C(poseTruth(:,ii))*mapTruth + sys.D(poseTruth(:,ii))*eta;
     
     %run RB Particle Filter
@@ -128,16 +129,21 @@ for ii = 2:L
     %calculate effective number of particles
     Neff(ii) = 1/sum(wMat(:,ii).^2);
     
+    disp(Neff(ii));
+    disp(ii/L);
+    
 end
 
 %extract map estimate
-mapHatXMat = xHatMat_l(1:2:(2*Nmap - 1),:);
-mapHatYMat = xHatMat_l(2:2:(2*Nmap),:);
+mapHatXMat = xHatMat_l(1:dim:(dim*Nmap - 2),:);
+mapHatYMat = xHatMat_l(2:dim:(dim*Nmap - 1),:);
+mapHatZMat = xHatMat_l(3:dim:(dim*Nmap - 0),:);
 
 %mapping error
 eMapX = mapHatXMat - mapTruthX;
 eMapY = mapHatYMat - mapTruthY;
-eMap = sqrt(mean(eMapX.^2 + eMapY.^2,1));
+eMapZ = mapHatZMat - mapTruthZ;
+eMap = sqrt(mean(eMapX.^2 + eMapY.^2 + eMapZ.^2,1));
 
 %Calculate the error for each particle at each instant in time
 eNonLin = zeros(Nstate,Npart,L);
