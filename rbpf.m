@@ -30,19 +30,13 @@ function [xHatOut, xMMSE_l, xMMSE_n] = rbpf(sys, y, xHat, Params)
 %   Npart = Number of particles to be used for the nonlinear states
 %
 % Outputs
-% xHatOut = the state estimate at time t = k, stacked as [x_l' x_n']'
+% Need to update
 
 %% Setup
 
 %local variables
 Npart = Params.Npart;
 gaussEval = @(x, mu, P) 1/sqrt((2*pi)^length(x) * det(P))*exp(-.5*(x - mu)'*P^(-1)*(x - mu));
-
-%check to verify A_n and f_l are zero
-if(sys.A_n ~= 0)
-    disp('ERROR: Non-zero A_n')
-    return
-end
 
 if(sys.f_l ~= 0)
     disp('ERROR: Non-zero f_l')
@@ -77,20 +71,26 @@ for ii = 1:Npart
     xHat_l_minus = xHat{ii}.xHat_l;
     P_l_minus = xHat{ii}.P_l;
     A_l = sys.A_l(xHat_n_minus);
+    A_n = sys.A_n(xHat_n_minus);
     B_n = sys.B_n(xHat_n_minus);
     B_l = sys.B_l(xHat_n_minus);
     
     % Draw Particles From Importance Distrubution (Bootstrap - p(x_k|x_k-1)
-    mu = sys.f_n(xHat_n_minus);
-    xHat{ii}.xHat_n = mvnrnd(mu, B_n*sys.Pnu_n*B_n')';
+    mu = sys.f_n(xHat_n_minus) + A_n*xHat_l_minus;
+    xHat{ii}.xHat_n = mvnrnd(mu, A_n*P_l_minus*A_n' + B_n*sys.Pnu_n*B_n')';
     
     % update the mean and covariance of all the KFs conditioned on the new
-    % particles (Don't need to do this because A_n = 0)
+    % particles
+    W = A_n*P_l_minus*A_n' + B_n*sys.Pnu_n*B_n';
+    K = P_l_minus*A_n'\W;
+    xHat{ii}.xHat_l = xHat_l_minus + K*(xHat{ii}.xHat_n - mu);
+    %xHat{ii}.P_l = P_l_minus - K*W*K';
+    xHat{ii}.P_l = (eye(sys.N_l) - K*A_n)*P_l_minus*(eye(sys.N_l) - K*A_n)' + K*sys.Pnu_n*K';
     
     % propagate the mean and covariance of the KFs (this is unecessary for
     % SLAM because map is static)
-    xHat{ii}.xHat_l = A_l*xHat_l_minus;
-    xHat{ii}.P_l = A_l*P_l_minus*A_l' + B_l*sys.Pnu_l*B_l';
+    xHat{ii}.xHat_l = A_l*xHat{ii}.xHat_l;
+    xHat{ii}.P_l = A_l*xHat{ii}.P_l*A_l' + B_l*sys.Pnu_l*B_l';
     
     
 end
@@ -131,7 +131,8 @@ for ii = 1:Npart
     W = C*P_l*C' + D*R*D';
     K = P_l*C'/W;
     xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
-    xHat{ii}.P_l = P_l - K*W*K';
+%     xHat{ii}.P_l = P_l - K*W*K';
+    xHat{ii}.P_l = (eye(sys.N_l) - K*C)*P_l*(eye(sys.N_l) - K*C)' + K*R*K';
     
 end
 
@@ -152,42 +153,6 @@ for ii = 1:Npart
     xMMSE_l = xMMSE_l + xHat{ii}.w*xHat{ii}.xHat_l;
     xMMSE_n = xMMSE_n + xHat{ii}.w*xHat{ii}.xHat_n;
 end
-
-% % perform kalman filter updates for each particle, finding p(x_l | x_n, y)
-% for ii = 1:Npart
-%
-%     %extract particle, build necessary matricies
-%     p = xHat{ii};
-%     C = sys.C(p.xHat_n);
-%     D = sys.D(p.xHat_n);
-%     P = p.P_l;
-%     R = sys.Peta;
-%     xHat_l = p.xHat_l;
-%     xHat_n = p.xHat_n;
-%
-%     %Kalman update
-%     K = P*C'/(C*P*C' + D*R*D');
-%     p.P_l = (eye(sys.N_l) - K*C)*P*(eye(sys.N_l) - K*C)' + K*D*R*D'*K';
-%     p.xHat_l = xHat_l + K*(y - sys.h(xHat_n) - C*xHat_l);
-%
-%     %reassign
-%     xHat{ii} = p;
-%
-% end
-
-% using the measurement, update the weights for each particle
-
-% propagate the kalman filter for each particle
-
-% use the propagation to sample the particles
-
-% use the samples as a measurement to perform another kalman update
-
-% obtain an estimate of the linear states
-
-% obtain an estimate of the nonlinear states
-
-
 
 xHatOut = xHat;
 end
