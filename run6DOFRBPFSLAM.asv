@@ -28,7 +28,7 @@ t = 0:dt:25*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
-Nmap = 3; %number of map objects
+Nmap = 5; %number of map objects
 Acam = eye(Nstate);
 Acam(1,3) = dt;
 Acam(2,4) = dt;
@@ -39,14 +39,14 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.01*eye(3),.01*eye(3),covQuat,.01*eye(3));
+sys.Pnu_n = blkdiag(.01*eye(3),.01*eye(3),covQuat,.0001*eye(3));
 sys.Peta = 0.1*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
 
 %% Filter Parameters
-Npart = 3000;
+Npart = 2000;
 Params.Npart = Npart;
 Params.estimateAngles = true;
 
@@ -64,7 +64,6 @@ mapTruthZ = mapTruth(3:3:(dim*Nmap - 0));
 muPose = zeros(Nstate,1);
 muPose(4:6) = [1 1 1]';
 muPose(1:3) = [-10 -10 -10];
-muPose(11:13) = [.1 .1 .1];
 Ppose0 = sys.Pnu_n;
 thetaTruth0 = mvnrnd(muTheta0,Ptheta0)';
 %using a scalar first quaternion representation
@@ -122,14 +121,12 @@ vMatTruth(:,1) = quatrotate(poseTruth(7:10,1)',v')';
 for ii = 2:L
     
     %Propagate Dynamics
-    poseTruth(:,ii) = sys.f_n(poseTruth(:,ii-1));
-    muQuat = poseTruth(7:10,ii);
-    poseTruth(:,ii) = poseTruth(:,ii) + mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
+    poseTruth(:,ii) = sys.f_n(poseTruth(:,ii-1)) + mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
     
      %draw random euler angles and create new quaternion
     randEuler = mvnrnd([0 0 0]', sys.Peuler);
     quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
-    poseTruth(7:10,ii) = quatmultiply(muQuat', quatNoise)';
+    poseTruth(7:10,ii) = quatmultiply(poseTruth(7:10,ii-1)', quatNoise)';
     vMatTruth(:,ii) = quatrotate(poseTruth(7:10,ii)',v')';
     
     %generate a measurement
@@ -161,8 +158,7 @@ for ii = 1:Npart
     xHatMat_l(:,1) = xHatMat_l(:,1) + xHatMat{ii,1}.w * xHatMat{ii,1}.xHat_l;
     xHatMat_n(:,1) = xHatMat_n(:,1) + xHatMat{ii,1}.w * xHatMat{ii,1}.xHat_n;
 end
-xHatMat_n(7:10,1) = xHatMat_n(7:10,1)/norm(xHatMat_n(7:10,1));
-vMatEst(:,1) = quatrotate(xHatMat_n(7:10,1)',v')';
+vMatEst(:,1) = quatrotate(xHat_n(7:10,1)',v')';
 
 %extract map estimate
 mapHatXMat = xHatMat_l(1:dim:(dim*Nmap - 2),:);
