@@ -12,7 +12,7 @@ t = 0:dt:10;
 L = length(t);
 dim = 2; %dimension of the model
 Nstate = 2*dim; %dimension of nonlinear state (2D pos and vel)
-Nmap = 50; %number of map objects
+Nmap = 3; %number of map objects
 Acam = eye(Nstate);
 Acam(1,3) = dt;
 Acam(2,4) = dt;
@@ -29,8 +29,8 @@ sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 
 %% Filter Parameters
-Params.Npart = 50;
-
+Params.Npart = 10000;
+Params.estimateAngles = false;
 
 %% Truth Initialization
 mapBounds = [-10 10];
