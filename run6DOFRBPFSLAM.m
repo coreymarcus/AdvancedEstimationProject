@@ -24,11 +24,12 @@ covQuat = cov(quatMat);
 
 %% System
 dt = .5;
-t = 0:dt:25*dt;
+t = 0:dt:10*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
-Nmap = 3; %number of map objects
+Nmap = 10; %number of map objects
+Nassociate = 3; %number of map objects associated with each particle
 Acam = eye(Nstate);
 Acam(1,3) = dt;
 Acam(2,4) = dt;
@@ -49,6 +50,8 @@ sys.Peuler = Peuler;
 Npart = 3000;
 Params.Npart = Npart;
 Params.estimateAngles = true;
+Params.Nmap = Nmap;
+Params.Nassociate = Nassociate;
 
 
 %% Truth Initialization
@@ -81,12 +84,18 @@ p0.P_l = Pmap0;
 %create all the particles
 xHat = cell(Npart,1);
 for ii = 1:Npart
+    
+    %initialize the particle's nonlinear estimate
     p0.xHat_n = zeros(Nstate,1);
     p0.xHat_n([1:6 11:13]) = mvnrnd(muPose([1:6 11:13]), Ppose0([1:6 11:13], [1:6 11:13]))';
     
     %initialize attitude
     thetaParticle = mvnrnd(muTheta0, Ptheta0)';
     p0.xHat_n(7:10) = angle2quat(thetaParticle(1),thetaParticle(2),thetaParticle(3))';
+    
+    %initialize the map features which the particle will consider
+    seq = randperm(Nmap);
+    p0.mapPts = seq(1:Nassociate);
     
     %assign
     xHat{ii} = p0;
@@ -152,7 +161,9 @@ for ii = 2:L
     Neff(ii) = 1/sum(wMat(:,ii).^2);
     
 %     disp(Neff(ii));
-%     disp(ii/L);
+    disp(' ')
+    disp('New Step')
+    disp(ii/L);
     
 end
 
