@@ -25,6 +25,7 @@ function [xHatOut, xMMSE_l, xMMSE_n] = rbpfSLAM(sys, y, xHat, Params)
 %   xHat_n - an estimate of the nonlinear states
 % Params - parameter structure with the following parameters
 %   Npart = Number of particles to be used for the nonlinear states
+%   estimateAngles - bool detirmining if attitude is estimated
 %
 % Outputs
 % xHatOut = the state estimate at time t = k, cell array where each cell is a
@@ -32,6 +33,9 @@ function [xHatOut, xMMSE_l, xMMSE_n] = rbpfSLAM(sys, y, xHat, Params)
 %   w - the particle weight
 %   xHat_l - an estimate of the linear states
 %   P_l - the covariance of the linear states
+%   xHat_n - an estimate of the nonlinear states
+% xMMSE_l - a MMSE estimate of the linear states
+% xMMSE_n - a MMSE estimate of the nonlinear states
 
 
 %% Setup
@@ -85,13 +89,8 @@ end
 
 %% Update
 
-%track weights for normalization
-% logwPrimeMat = zeros(Npart,1);
+%measurement covariance
 R = sys.Peta;
-
-% xHatMat = zeros(13,Npart);
-
-hMat = zeros(sys.N_l,Npart);
 
 % we use this scale factor to prevent underflow errors
 a = 2;
@@ -99,7 +98,6 @@ a = 2;
 for ii = 1:Npart
     
     % Local variables
-    w_minus = xHat{ii}.w;
     xHat_n = xHat{ii}.xHat_n;
     xHat_l = xHat{ii}.xHat_l;
    
@@ -112,22 +110,16 @@ for ii = 1:Npart
     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
     wMat(ii) = p;
     
-    hMat(:,ii) = h_n;
-    
-%     xHatMat(:,ii) = xHat_n;
-    
 end
-
-% wPrimePrime = exp(logwPrimeMat - max(logwPrimeMat));
 
 % Renormalize the weights, raise to the correct power, then normalize again
 wMat = wMat/sum(wMat);
-Nattrition = sum(wMat == 0)
+% Nattrition = sum(wMat == 0)
 wMat = wMat.^a;
 wTrack = sum(wMat);
 wMat = wMat/sum(wMat);
-Neff = 1/sum(wMat.^2)
-Nattrition = sum(wMat == 0)
+% Neff = 1/sum(wMat.^2)
+% Nattrition = sum(wMat == 0)
 
 if(wTrack == 0)
     disp('Error: Unstable Weight Normalization!')
@@ -175,21 +167,21 @@ for ii = 1:Npart
     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
     wMat(ii) = w_minus*p;
     
-%     % Update the KFs with the measurement
-%     W = C*P_l*C' + D*R*D';
-%     K = P_l*C'/W;
-%     xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
-%     xHat{ii}.P_l = P_l - K*W*K';
+    % Update the KFs with the measurement
+    W = C*P_l*C' + D*R*D';
+    K = P_l*C'/W;
+    xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
+    xHat{ii}.P_l = P_l - K*W*K';
     
 end
 
 % Renormalize the weights
 wMat = wMat/sum(wMat);
 wMat = wMat.^a;
-wTrack = sum(wMat);
+% wTrack = sum(wMat);
 wMat = wMat/sum(wMat);
-Neff = 1/sum(wMat.^2)
-Nattrition = sum(wMat == 0)
+% Neff = 1/sum(wMat.^2)
+% Nattrition = sum(wMat == 0)
 
 %reassign weights
 for ii = 1:Npart

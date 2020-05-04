@@ -24,11 +24,11 @@ covQuat = cov(quatMat);
 
 %% System
 dt = .5;
-t = 0:dt:25*dt;
+t = 0:dt:10*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
-Nmap = 3; %number of map objects
+Nmap = 5; %number of map objects
 Acam = eye(Nstate);
 Acam(1,3) = dt;
 Acam(2,4) = dt;
@@ -39,7 +39,7 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.01*eye(3),.01*eye(3),covQuat,.01*eye(3));
+sys.Pnu_n = blkdiag(.001*eye(3),.01*eye(3),covQuat,.01*eye(3));
 sys.Peta = 0.1*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
@@ -54,7 +54,7 @@ Params.estimateAngles = true;
 %% Truth Initialization
 mapBounds = [-10 10];
 muMap = mapBounds(1) + (mapBounds(2) - mapBounds(1))*rand(dim*Nmap,1);
-Pmap0 = 0*eye(dim*Nmap);
+Pmap0 = 0.1*eye(dim*Nmap);
 muTheta0 = zeros(3,1);
 Ptheta0 = Peuler;
 mapTruth = mvnrnd(muMap, Pmap0)';
@@ -199,7 +199,7 @@ estMapVect = xHatMat_l(:,end);
 cost = @(x)alignCost(x,estMapVect,mapTruth);
 
 options = optimoptions('lsqnonlin','MaxFunctionEvaluations',100000, ...
-    'MaxIterations',100000);
+    'MaxIterations',100000,'Algorithm','levenberg-marquardt');
 
 %calculate alignment
 xHat = lsqnonlin(cost,zeros(6,1),[],[],options);
