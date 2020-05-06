@@ -8,13 +8,13 @@ close all
 clc
 
 %% Options
-N_MC = 100; %number of monte carlo runs
+N_MC = 50; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
-playFinishedNoise = true; %plays a tone when finished
+playFinishedNoise = false; %plays a tone when finished
 
 %% Approximate Covariance for Angular Process Noise
-N = 100000; %number of samples
-Peuler = .001*eye(3);
+N = 10000; %number of samples
+Peuler = 0.00005*eye(3);
 muEuler = [0 0 0]';
 
 quatMat = zeros(N,4);
@@ -46,8 +46,8 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.05*eye(3),.01*eye(3),covQuat,.01*eye(3));
-sys.Peta = 0.1*eye(dim*Nmap);
+sys.Pnu_n = blkdiag(.0005*eye(3),.0001*eye(3),covQuat,.0001*eye(3));
+sys.Peta = 0.01*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
@@ -173,7 +173,7 @@ for ii = 1:N_MC
         y = sys.h(truePose(:,jj,ii)) + sys.C(truePose(:,jj,ii))*mapTruthIter + sys.D(truePose(:,jj,ii))*eta;
         
         %run RB Particle Filter
-        [xHat, xHat_l, xHat_n] = rbpfSLAM(sys, y, xHat, Params);
+        [xHat, xHat_l, xHat_n] = rbpfSLAM(sys, y, xHat, Params, muQuat);
         
         %store values
         estPoseRBPF(:,jj,ii) = xHat_n;

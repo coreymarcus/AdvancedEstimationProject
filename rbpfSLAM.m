@@ -1,4 +1,4 @@
-function [xHatOut, xMMSE_l, xMMSE_n] = rbpfSLAM(sys, y, xHat, Params)
+function [xHatOut, xMMSE_l, xMMSE_n] = rbpfSLAM(sys, y, xHat, Params, quatTrue)
 %rbpf - Rao Blackwellised Particle Filter Optimized for SLAM - provides an 
 %   iteration of an RBPF given a system, measurement, and turning
 %   parameters. Source is Zanetti's notes on RBPFs. Calculations
@@ -75,7 +75,7 @@ for ii = 1:Npart
     
     % Draw Particles From Importance Distrubution (Bootstrap - p(x_k|x_k-1)
     mu = sys.f_n(xHat_n_minus);    
-    xHat{ii}.xHat_n = mvnrnd(mu, B_n*sys.Pnu_n*B_n')';
+    xHat{ii}.xHat_n = mu + mvnrnd(zeros(sys.N_n,1), B_n*sys.Pnu_n*B_n')';
     
     if(estimateAngles)
         mu_q = mu(7:10);
@@ -84,6 +84,9 @@ for ii = 1:Npart
         quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
         xHat{ii}.xHat_n(7:10) = quatmultiply(quatNoise, mu_q');
     end
+    
+    %we know the true quaternion
+%     xHat{ii}.xHat_n(7:10) = quatTrue;
 
     
 end
@@ -138,7 +141,7 @@ for ii = 1:Npart
 end
 
 %resample
-b = .5; %resample tightness
+b = 0; %resample tightness
 
 for ii = 1:Npart
     
@@ -155,6 +158,9 @@ for ii = 1:Npart
     randEuler = mvnrnd([0 0 0]',b*(sys.Peuler));
     quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
     xHat{ii}.xHat_n(7:10) = quatmultiply(mu_q', quatNoise);
+    
+    %we know the true quaternion
+%     xHat{ii}.xHat_n(7:10) = quatTrue;
     
     %recalculate locals
     xHat_n = xHat{ii}.xHat_n;
