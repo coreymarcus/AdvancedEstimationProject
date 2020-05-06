@@ -16,6 +16,7 @@ function [xHatOut, xMMSE_l, xMMSE_n] = rbpfSLAM(sys, y, xHat, Params)
 %   Peta = Covariance for measurement noise
 %   N_n = dim of nonlinear state
 %   N_l = dim of linear state
+%   Peuler - covariance of the euler angles (for attitude estimation only)
 % y = the measurement at time t = k
 % xHat - the [Npart x 1] state estimate cell array where each cell is a
 %   structure corresponding to a particle with the following fields
@@ -137,7 +138,7 @@ for ii = 1:Npart
 end
 
 %resample
-b = 1; %resample tightness
+b = .5; %resample tightness
 
 for ii = 1:Npart
     

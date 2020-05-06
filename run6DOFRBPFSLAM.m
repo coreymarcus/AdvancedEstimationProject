@@ -23,8 +23,8 @@ covQuat = cov(quatMat);
 % load('quatParams.mat');
 
 %% System
-dt = .5;
-t = 0:dt:10*dt;
+dt = .25;
+t = 0:dt:20*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
@@ -39,7 +39,7 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.001*eye(3),.01*eye(3),covQuat,.01*eye(3));
+sys.Pnu_n = blkdiag(.05*eye(3),.01*eye(3),covQuat,.01*eye(3));
 sys.Peta = 0.1*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
@@ -151,8 +151,8 @@ for ii = 2:L
     %calculate effective number of particles
     Neff(ii) = 1/sum(wMat(:,ii).^2);
     
-%     disp(Neff(ii));
-%     disp(ii/L);
+    disp(Neff(ii));
+    disp(ii/L);
     
 end
 
@@ -199,7 +199,8 @@ estMapVect = xHatMat_l(:,end);
 cost = @(x)alignCost(x,estMapVect,mapTruth);
 
 options = optimoptions('lsqnonlin','MaxFunctionEvaluations',100000, ...
-    'MaxIterations',100000,'Algorithm','levenberg-marquardt');
+    'MaxIterations',100000,'Algorithm','levenberg-marquardt',...
+    'FunctionTolerance',1E-8,'Display','iter');
 
 %calculate alignment
 xHat = lsqnonlin(cost,zeros(6,1),[],[],options);
@@ -258,10 +259,10 @@ legend('True','Estimate')
 % legend('Est Traj.','True Traj')
 
 figure
-plot3(xHatMat_n(1,:), xHatMat_n(2,:), xHatMat_n(3,:))
+plot3(estPlot(1,:), estPlot(2,:), estPlot(3,:))
 hold on
 plot3(poseTruth(1,:), poseTruth(2,:), poseTruth(3,:))
-quiver3(xHatMat_n(1,:), xHatMat_n(2,:), xHatMat_n(3,:),...
+quiver3(estPlot(1,:), estPlot(2,:), estPlot(3,:),...
     vMatEst(1,:), vMatEst(2,:), vMatEst(3,:))
 quiver3(poseTruth(1,:), poseTruth(2,:), poseTruth(3,:),...
     vMatTruth(1,:), vMatTruth(2,:), vMatTruth(3,:))
@@ -269,6 +270,24 @@ legend('Est Traj.','True Traj','Est Pointing', 'True Pointing')
 xlabel('x')
 ylabel('y')
 zlabel('z')
+
+figure
+plot(t, estPlot(1,:), t, poseTruth(1,:))
+legend('Est Traj.','True Traj','Est Pointing', 'True Pointing')
+xlabel('Time')
+ylabel('x')
+
+figure
+plot(t, estPlot(2,:), t, poseTruth(2,:))
+legend('Est Traj.','True Traj','Est Pointing', 'True Pointing')
+xlabel('Time')
+ylabel('y')
+
+figure
+plot(t, estPlot(3,:), t, poseTruth(3,:))
+legend('Est Traj.','True Traj','Est Pointing', 'True Pointing')
+xlabel('Time')
+ylabel('z')
 
 figure
 plot(t,wMat)
