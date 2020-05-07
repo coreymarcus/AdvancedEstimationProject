@@ -8,7 +8,7 @@ close all
 clc
 
 %% Options
-N_MC = 100; %number of monte carlo runs
+N_MC = 25; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
 playFinishedNoise = false; %plays a tone when finished
 
@@ -46,14 +46,14 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.0005*eye(3),.0001*eye(3),covQuat,.0001*eye(3));
+sys.Pnu_n = blkdiag(.0010*eye(3),.0005*eye(3),covQuat,.0005*eye(3));
 sys.Peta = 0.01*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
 
 %% RBPF Parameters
-Npart = 6000;
+Npart = 3000;
 Params.Npart = Npart;
 Params.estimateAngles = true;
 
@@ -157,17 +157,17 @@ for ii = 1:N_MC
     %% Run Model
     for jj = 2:L
         
-        %Propagate Dynamics
-        truePose(:,jj,ii) = sys.f_n(truePose(:,jj-1,ii));
-        muQuat = truePose(7:10,jj,ii);
-        
         % add process noise
-        truePose(:,jj,ii) = truePose(:,jj,ii) + mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
-        
+        toProp = truePose(:,jj-1,ii) + mvnrnd(zeros(sys.N_n,1),sys.Pnu_n)';
+
         %draw random euler angles and create new quaternion
+        muQuat = truePose(7:10,jj-1,ii);  
         randEuler = mvnrnd([0 0 0]', sys.Peuler);
         quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
-        truePose(7:10,jj,ii) = quatmultiply(muQuat', quatNoise)';
+        toProp(7:10) = quatmultiply(muQuat', quatNoise)';
+        
+        %Propagate Dynamics
+        truePose(:,jj,ii) = sys.f_n(toProp);
         
         %generate a measurement
         eta = mvnrnd(zeros(sys.N_l,1),sys.Peta)';

@@ -74,16 +74,20 @@ for ii = 1:Npart
     B_n = sys.B_n(xHat_n_minus);
     
     % Draw Particles From Importance Distrubution (Bootstrap - p(x_k|x_k-1)
-    mu = sys.f_n(xHat_n_minus);    
-    xHat{ii}.xHat_n = mu + mvnrnd(zeros(sys.N_n,1), B_n*sys.Pnu_n*B_n')';
+    toProp = xHat_n_minus + mvnrnd(zeros(sys.N_n,1), B_n*sys.Pnu_n*B_n')';
     
+    
+    % Attitude noise
     if(estimateAngles)
-        mu_q = mu(7:10);
+        mu_q = xHat_n_minus(7:10);  
         %draw random euler angles and create new quaternion
         randEuler = mvnrnd([0 0 0]', sys.Peuler);
         quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
-        xHat{ii}.xHat_n(7:10) = quatmultiply(quatNoise, mu_q');
+        toProp(7:10) = quatmultiply(quatNoise, mu_q');
     end
+    
+    %propagate
+    xHat{ii}.xHat_n = sys.f_n(toProp);    
     
     %we know the true quaternion
 %     xHat{ii}.xHat_n(7:10) = quatTrue;
@@ -142,7 +146,7 @@ for ii = 1:Npart
 end
 
 %resample
-b = .5; %resample tightness
+b = 0; %resample tightness
 
 for ii = 1:Npart
     
