@@ -111,7 +111,8 @@ for ii = 1:Npart
     P_l = xHat{ii}.P_l;
     
     % Evauluate the gaussian and update weight
-    p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+%     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+    p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
     wMat(ii) = p;
     
 end
@@ -141,7 +142,7 @@ for ii = 1:Npart
 end
 
 %resample
-b = 0; %resample tightness
+b = .5; %resample tightness
 
 for ii = 1:Npart
     
@@ -171,7 +172,8 @@ for ii = 1:Npart
     w_minus = 1/Npart;
     
     % Evauluate the gaussian and update weight
-    p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+%     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+    p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
     wMat(ii) = w_minus*p;
     
     % Update the KFs with the measurement
