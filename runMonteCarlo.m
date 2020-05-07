@@ -10,11 +10,11 @@ clc
 %% Options
 N_MC = 100; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
-playFinishedNoise = true; %plays a tone when finished
+playFinishedNoise = false; %plays a tone when finished
 
 %% Approximate Covariance for Angular Process Noise
-N = 100000; %number of samples
-Peuler = .001*eye(3);
+N = 10000; %number of samples
+Peuler = 0.00005*eye(3);
 muEuler = [0 0 0]';
 
 quatMat = zeros(N,4);
@@ -35,7 +35,7 @@ t = 0:dt:20*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
-Nmap = 5; %number of map objects
+Nmap = 10; %number of map objects
 Acam = eye(Nstate);
 Acam(1,3) = dt;
 Acam(2,4) = dt;
@@ -46,14 +46,14 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.05*eye(3),.01*eye(3),covQuat,.01*eye(3));
-sys.Peta = 0.1*eye(dim*Nmap);
+sys.Pnu_n = blkdiag(.0005*eye(3),.0001*eye(3),covQuat,.0001*eye(3));
+sys.Peta = 0.01*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
 
 %% RBPF Parameters
-Npart = 3000;
+Npart = 6000;
 Params.Npart = Npart;
 Params.estimateAngles = true;
 
@@ -72,6 +72,7 @@ estMapCovRBPF = zeros(3*Nmap,3*Nmap,L,N_MC);
 
 %% Begin Monte Carlo
 tic; %starting a timer
+invalidRuns = []; %tracking statistics
 for ii = 1:N_MC
     %% Truth Initialization
     mapBounds = [-15 15];
@@ -173,7 +174,7 @@ for ii = 1:N_MC
         y = sys.h(truePose(:,jj,ii)) + sys.C(truePose(:,jj,ii))*mapTruthIter + sys.D(truePose(:,jj,ii))*eta;
         
         %run RB Particle Filter
-        [xHat, xHat_l, xHat_n] = rbpfSLAM(sys, y, xHat, Params);
+        [xHat, xHat_l, xHat_n] = rbpfSLAM(sys, y, xHat, Params, muQuat);
         
         %store values
         estPoseRBPF(:,jj,ii) = xHat_n;
@@ -209,6 +210,7 @@ for ii = 1:N_MC
         estTimeRemaining = (1 - fracComplete)*timeElapsed/fracComplete;
         fprintf('Time Elapsed (min): %4.2f \n',timeElapsed/60)
         fprintf('Estimated Time Remaining (min): %4.2f \n',estTimeRemaining/60)
+        fprintf('Number of Potentially Invalid Runs Detected: %4i \n',length(invalidRuns))
         
         
     end
@@ -220,6 +222,15 @@ for ii = 1:N_MC
     cost = @(x)alignCost(x,estMapVect,mapTruthIter);
     options = optimoptions('lsqnonlin','MaxFunctionEvaluations',100000, ...
         'MaxIterations',100000,'Algorithm','levenberg-marquardt','Display','off');
+    
+    
+    %check to see if cost returns NaN
+
+    if(isnan(cost(zeros(6,1))))
+        invalidRuns = [invalidRuns ii];
+        disp('Warning: Invalid Run Detected')
+        continue;
+    end
     
     %calculate alignment
     xHat = lsqnonlin(cost,zeros(6,1),[],[],options);
@@ -267,7 +278,17 @@ for ii = 1:N_MC
     
 end
 
+%look for invalid runs
+if(~isempty(invalidRuns))
+    disp('Warning: The following runs may be invalid:')
+    disp(invalidRuns)
+    disp('Recommend changing idxs variable')
+end
+
 %% Calculate some statistics
+
+%you need to redefine this manually if there are invalid runs
+idxs = 1:N_MC;
 
 %Get the average covariance from the filters
 estPoseCovRBPFmean = mean(estPoseCovRBPF,4);
@@ -339,7 +360,7 @@ end
 
 %plot the position error for every MC run
 figure
-for ii = 1:N_MC
+for ii = idxs
     
     %x
     subplot(3,1,1)
@@ -373,7 +394,7 @@ plot(t, squeeze(sqrt(estPoseCovRBPFmean(2,2,:))), '-k')
 plot(t, -squeeze(sqrt(estPoseCovRBPFmean(2,2,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(2,2,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(2,2,:))), '--b', 'HandleVisibility', 'off')
-plot(t, errPoseRBPFmean(3,:), 'r')
+plot(t, errPoseRBPFmean(2,:), 'r')
 legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,3)
@@ -389,7 +410,7 @@ legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 %plot the velocity error for every MC run
 figure
-for ii = 1:N_MC
+for ii = idxs
     
     %x
     subplot(3,1,1)
@@ -440,7 +461,7 @@ plot(t, errPoseRBPFmean(idx,:), 'r')
 
 %plot the angle error for every MC run
 figure
-for ii = 1:N_MC
+for ii = idxs
     
     %x
     subplot(3,1,1)
@@ -468,6 +489,7 @@ idx = 7;
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,2)
 ylabel('e_y')
@@ -477,6 +499,7 @@ idx = 8;
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,3)
 xlabel('Time (sec)')
@@ -487,10 +510,11 @@ idx = 9;
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Sample 1 \sigma', 'Mean Error')
 
 %plot the body rate error for every MC run
 figure
-for ii = 1:N_MC
+for ii = idxs
     
     %x
     subplot(3,1,1)
@@ -540,7 +564,7 @@ plot(t, errPoseRBPFmean(idx,:), 'r')
 
 % Plot the Mapping Error for Every MC Run and Every Point
 figure
-for ii = 1:N_MC
+for ii = idxs
     for jj = 1:Nmap
         
         %x
@@ -596,7 +620,7 @@ legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 % plot the effective number of particles
 figure
 hold on
-for ii = 1:N_MC
+for ii = idxs
     plot(t, NeffRBPF(:,ii), 'Color', [.8 .8 .8])
 end
 xlabel('Time (sec)')
