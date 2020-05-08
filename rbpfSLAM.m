@@ -142,7 +142,7 @@ for ii = 1:Npart
 end
 
 %resample
-b = .5; %resample tightness
+b = 0; %resample tightness
 
 for ii = 1:Npart
     

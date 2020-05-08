@@ -8,7 +8,7 @@ close all
 clc
 
 %% Options
-N_MC = 100; %number of monte carlo runs
+N_MC = 1; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
 playFinishedNoise = false; %plays a tone when finished
 
