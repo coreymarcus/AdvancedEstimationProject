@@ -112,69 +112,9 @@ for ii = 1:Npart
     
     % Evauluate the gaussian and update weight
 %     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
-    p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
+    p = logGaussEval(y, h_n + C*xHat_l, a*D*R*D');
     wMat(ii) = p;
     
-end
-
-% Renormalize the weights, raise to the correct power, then normalize again
-wMat = wMat/sum(wMat);
-% Nattrition = sum(wMat == 0)
-wMat = wMat.^a;
-wTrack = sum(wMat);
-wMat = wMat/sum(wMat);
-% Neff = 1/sum(wMat.^2)
-% Nattrition = sum(wMat == 0)
-
-if(wTrack == 0)
-    disp('Error: Unstable Weight Normalization!')
-end
-
-%split particles
-split = sysresample(wMat);
-
-%resample particles
-xHat = xHat(split);
-
-%reassign weights
-for ii = 1:Npart
-    xHat{ii}.w = 1/Npart;
-end
-
-%resample
-b = 0; %resample tightness
-
-for ii = 1:Npart
-    
-    % Local variables
-    xHat_n = xHat{ii}.xHat_n;
-    xHat_l = xHat{ii}.xHat_l;
-    
-    % Draw Particles
-    mu = xHat_n;
-    mu_q = mu(7:10);
-    xHat{ii}.xHat_n = mvnrnd(mu, b*(sys.Pnu_n))';
-    
-    %draw random euler angles and create new quaternion
-    randEuler = mvnrnd([0 0 0]',b*(sys.Peuler));
-    quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
-    xHat{ii}.xHat_n(7:10) = quatmultiply(mu_q', quatNoise);
-    
-    %we know the true quaternion
-%     xHat{ii}.xHat_n(7:10) = quatTrue;
-    
-    %recalculate locals
-    xHat_n = xHat{ii}.xHat_n;
-    h_n = sys.h(xHat_n);
-    C = sys.C(xHat_n);
-    D = sys.D(xHat_n);
-    P_l = xHat{ii}.P_l;
-    w_minus = 1/Npart;
-    
-    % Evauluate the gaussian and update weight
-%     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
-    p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
-    wMat(ii) = w_minus*p;
     
     % Update the KFs with the measurement
     W = C*P_l*C' + D*R*D';
@@ -184,18 +124,93 @@ for ii = 1:Npart
     
 end
 
-% Renormalize the weights
+Nattrition = sum(wMat == 0)
+
+%find the standard weight
+wMax = max(wMat);
+for ii = 1:Npart
+    wMat(ii) = exp(wMat(ii) - wMax);
+end
+
+% Renormalize the weights, raise to the correct power, then normalize again
 wMat = wMat/sum(wMat);
+Nattrition = sum(wMat == 0)
 wMat = wMat.^a;
-% wTrack = sum(wMat);
+wTrack = sum(wMat);
 wMat = wMat/sum(wMat);
-% Neff = 1/sum(wMat.^2)
-% Nattrition = sum(wMat == 0)
+Neff = 1/sum(wMat.^2)
+Nattrition = sum(wMat == 0)
+
+if(wTrack == 0)
+    disp('Error: Unstable Weight Normalization!')
+end
+
+% %split particles
+% split = sysresample(wMat);
+% 
+% %resample particles
+% xHat = xHat(split);
 
 %reassign weights
 for ii = 1:Npart
     xHat{ii}.w = wMat(ii);
 end
+
+% %resample
+% b = 0; %resample tightness
+% 
+% for ii = 1:Npart
+%     
+%     % Local variables
+%     xHat_n = xHat{ii}.xHat_n;
+%     xHat_l = xHat{ii}.xHat_l;
+%     
+%     % Draw Particles
+%     mu = xHat_n;
+%     mu_q = mu(7:10);
+%     xHat{ii}.xHat_n = mvnrnd(mu, b*(sys.Pnu_n))';
+%     
+%     %draw random euler angles and create new quaternion
+%     randEuler = mvnrnd([0 0 0]',b*(sys.Peuler));
+%     quatNoise = angle2quat(randEuler(1),randEuler(2),randEuler(3),'ZYX');
+%     xHat{ii}.xHat_n(7:10) = quatmultiply(mu_q', quatNoise);
+%     
+%     %we know the true quaternion
+% %     xHat{ii}.xHat_n(7:10) = quatTrue;
+%     
+%     %recalculate locals
+%     xHat_n = xHat{ii}.xHat_n;
+%     h_n = sys.h(xHat_n);
+%     C = sys.C(xHat_n);
+%     D = sys.D(xHat_n);
+%     P_l = xHat{ii}.P_l;
+%     w_minus = 1/Npart;
+%     
+%     % Evauluate the gaussian and update weight
+% %     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+%     p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
+%     wMat(ii) = w_minus*p;
+%     
+%     % Update the KFs with the measurement
+%     W = C*P_l*C' + D*R*D';
+%     K = P_l*C'/W;
+%     xHat{ii}.xHat_l = xHat_l + K*(y - h_n - C*xHat_l);
+%     xHat{ii}.P_l = P_l - K*W*K';
+%     
+% end
+% 
+% % Renormalize the weights
+% wMat = wMat/sum(wMat);
+% wMat = wMat.^a;
+% % wTrack = sum(wMat);
+% wMat = wMat/sum(wMat);
+% % Neff = 1/sum(wMat.^2)
+% % Nattrition = sum(wMat == 0)
+% 
+% %reassign weights
+% for ii = 1:Npart
+%     xHat{ii}.w = wMat(ii);
+% end
 
 
 %find the MMSE Estimates

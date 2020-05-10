@@ -14,7 +14,7 @@ playFinishedNoise = false; %plays a tone when finished
 
 %% Approximate Covariance for Angular Process Noise
 N = 10000; %number of samples
-Peuler = 0.00005*eye(3);
+Peuler = 0.00010*eye(3);
 muEuler = [0 0 0]';
 
 quatMat = zeros(N,4);
@@ -31,7 +31,7 @@ clear quatMat N
 
 %% System
 dt = .25;
-t = 0:dt:20*dt;
+t = 0:dt:10*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
@@ -46,7 +46,7 @@ sys.B_l = @(x_n) eye(dim*Nmap);
 sys.h = @(x_n) h(x_n, Nmap);
 sys.C = @(x_n) C(x_n, Nmap);
 sys.D = @(x_n) eye(dim*Nmap);
-sys.Pnu_n = blkdiag(.0005*eye(3),.0001*eye(3),covQuat,.0001*eye(3));
+sys.Pnu_n = blkdiag(.0010*eye(3),.0005*eye(3),covQuat,.0005*eye(3));
 sys.Peta = 0.01*eye(dim*Nmap);
 sys.N_n = Nstate;
 sys.N_l = dim*Nmap;
