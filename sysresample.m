@@ -1,3 +1,5 @@
+%Systematic Resampling For Particles
+%Sourced from Advanced Estiamtion Course Notes
 function i = sysresample(q)
 qc = cumsum(q);
 M = length(q);
