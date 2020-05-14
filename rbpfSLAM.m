@@ -111,8 +111,8 @@ for ii = 1:Npart
     P_l = xHat{ii}.P_l;
     
     % Evauluate the gaussian and update weight
-%     p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
-    p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
+    p = gaussEval(y, h_n + C*xHat_l, a*(C*P_l*C' + D*R*D'));
+%     p = gaussEval(y, h_n + C*xHat_l, a*D*R*D');
     wMat(ii) = p;
     
 end

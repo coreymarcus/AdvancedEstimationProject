@@ -8,7 +8,7 @@ close all
 clc
 
 %% Options
-N_MC = 1; %number of monte carlo runs
+N_MC = 25; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
 playFinishedNoise = false; %plays a tone when finished
 
@@ -31,7 +31,7 @@ clear quatMat N
 
 %% System
 dt = .25;
-t = 0:dt:20*dt;
+t = 0:dt:10*dt;
 L = length(t);
 dim = 3; %dimension of the model
 Nstate = 13; %dimension of nonlinear state (pos, vel, quat inertial to body, and rate wrt inertial expressed in body)
@@ -53,7 +53,7 @@ sys.N_l = dim*Nmap;
 sys.Peuler = Peuler;
 
 %% RBPF Parameters
-Npart = 6000;
+Npart = 3000;
 Params.Npart = Npart;
 Params.estimateAngles = true;
 
