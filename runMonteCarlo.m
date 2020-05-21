@@ -8,7 +8,7 @@ close all
 clc
 
 %% Options
-N_MC = 25; %number of monte carlo runs
+N_MC = 50; %number of monte carlo runs
 createFirstIterationPlots = true; %create a bunch of nice plots for the first MC run
 playFinishedNoise = false; %plays a tone when finished
 
@@ -69,6 +69,8 @@ eNormMap = zeros(L,N_MC);
 NeffRBPF = zeros(L,N_MC);
 estPoseCovRBPF = zeros(Nstate,Nstate,L,N_MC);
 estMapCovRBPF = zeros(3*Nmap,3*Nmap,L,N_MC);
+estCovXgivenY = zeros(Nstate + dim*Nmap, Nstate + dim*Nmap, L, N_MC);
+estCovX = zeros(Nstate + dim*Nmap, Nstate + dim*Nmap, L)
 
 %% Begin Monte Carlo
 tic; %starting a timer
@@ -146,13 +148,21 @@ for ii = 1:N_MC
     xHat_l = muMap;
     
     %Covariance
+    xHatTotal = zeros(Nstate + dim*Nmap, Npart);
     for kk = 1:Npart
         estPoseCovRBPF(:,:,1,ii) = estPoseCovRBPF(:,:,1,ii) + ...
             xHat{kk}.w*(xHat{kk}.xHat_n - xHat_n)*(xHat{kk}.xHat_n - xHat_n)';
         estMapCovRBPF(:,:,1,ii) = estMapCovRBPF(:,:,1,ii) + ...
             xHat{kk}.w*(xHat{kk}.P_l + xHat{kk}.xHat_l*xHat{kk}.xHat_l' - ...
             xHat_l*xHat_l');
+        
+        %draw linear states from distribution
+        xHat_lDraw = mvnrnd(xHat{kk}.xHat_l, xHat{kk}.P_l)';
+        xHatTotal(:,kk) = [xHat{kk}.xHat_n; xHat_lDraw]';    
     end
+    
+    %get total covariance
+    estCovXgivenY(:,:,1,ii) = cov(xHatTotal');
     
     %% Run Model
     for jj = 2:L
@@ -190,15 +200,22 @@ for ii = 1:N_MC
         NeffRBPF(jj,ii) = 1/sum(wMat.^2);
         
         %Covariance
+        xHatTotal = zeros(Nstate + dim*Nmap, Npart);
         for kk = 1:Npart
             estPoseCovRBPF(:,:,jj,ii) = estPoseCovRBPF(:,:,jj,ii) + ...
                 xHat{kk}.w*(xHat{kk}.xHat_n - xHat_n)*(xHat{kk}.xHat_n - xHat_n)';
             estMapCovRBPF(:,:,jj,ii) = estMapCovRBPF(:,:,jj,ii) + ...
                 xHat{kk}.w*(xHat{kk}.P_l + xHat{kk}.xHat_l*xHat{kk}.xHat_l' - ...
                 xHat_l*xHat_l');
+            
+            %draw linear states from distribution
+            xHat_lDraw = mvnrnd(xHat{kk}.xHat_l, xHat{kk}.P_l)';
+            xHatTotal(:,kk) = [xHat{kk}.xHat_n; xHat_lDraw]';
         end
         
-        
+        %get total covariance
+        estCovXgivenY(:,:,jj,ii) = cov(xHatTotal');
+         
         %Output Diagnostics
         clc
         fprintf('MC Iteration: %i / %i \n',ii,N_MC)
@@ -307,6 +324,9 @@ errMapCovRBPFsample = zeros(3*Nmap,3*Nmap,L);
 errMapCovRBPFsampleX = zeros(1,L);
 errMapCovRBPFsampleY = zeros(1,L);
 errMapCovRBPFsampleZ = zeros(1,L);
+
+%initialize the monte carlo covariance
+covMonteCarlo = zeros(Nstate + dim*Nmap, Nstate + dim*Nmap, L);
 for ii = 1:L
     
     %reshape the map error for covariance analysis
@@ -316,13 +336,34 @@ for ii = 1:L
     errPoseCovRBPFsample(:,:,ii) = cov(squeeze(errPoseRBPF(:,ii,:))');
     errMapCovRBPFsample(:,:,ii) = cov(targ');
     
-    estMapCovRBPFmeanX(ii) = mean(diag(estMapCovRBPF(1:3:(3*Nmap - 2), 1:3:(3*Nmap - 2), ii)));
-    estMapCovRBPFmeanY(ii) = mean(diag(estMapCovRBPF(2:3:(3*Nmap - 1), 2:3:(3*Nmap - 1), ii)));
-    estMapCovRBPFmeanZ(ii) = mean(diag(estMapCovRBPF(3:3:(3*Nmap - 0), 3:3:(3*Nmap - 0), ii)));
+%     estMapCovRBPFmeanX(ii) = mean(diag(estMapCovRBPF(1:3:(3*Nmap - 2), 1:3:(3*Nmap - 2), ii)));
+%     estMapCovRBPFmeanY(ii) = mean(diag(estMapCovRBPF(2:3:(3*Nmap - 1), 2:3:(3*Nmap - 1), ii)));
+%     estMapCovRBPFmeanZ(ii) = mean(diag(estMapCovRBPF(3:3:(3*Nmap - 0), 3:3:(3*Nmap - 0), ii)));
     
     errMapCovRBPFsampleX(ii) = mean(diag(errMapCovRBPFsample(1:3:(3*Nmap - 2), 1:3:(3*Nmap - 2), ii)));
     errMapCovRBPFsampleY(ii) = mean(diag(errMapCovRBPFsample(2:3:(3*Nmap - 1), 2:3:(3*Nmap - 1), ii)));
     errMapCovRBPFsampleZ(ii) = mean(diag(errMapCovRBPFsample(3:3:(3*Nmap - 0), 3:3:(3*Nmap - 0), ii)));
+    
+    %monte carlo covariance
+    T1 = mean(estCovXgivenY(:,:,ii,:),4); %E[cov(x|y)]
+    T2 = zeros(Nstate + dim*Nmap); %cov(E[x|y])
+    xBigStack = zeros(Nstate + dim*Nmap,N_MC);
+    for jj = 1:N_MC
+        
+        %stack pose and map
+        xBig = [estPoseRBPF(:,ii,jj);
+            reshape(estMapRBPF(:,:,ii,jj), dim*Nmap ,1)];
+        T2 = T2 + xBig*xBig'/N_MC;
+        xBigStack(:,jj) = xBig;
+    end
+    
+    %last part of T2 E[E[x|y]]*E[E[x|y]]'
+    T2 = T2 - mean(xBigStack,2)*mean(xBigStack,2)';
+    estCovX(:,:,ii) = T1 + T2;
+    
+    estMapCovRBPFmeanX(ii) = mean(diag(estCovX(Nstate + 1:3:Nstate + (3*Nmap - 2), Nstate + 1:3:Nstate + (3*Nmap - 2), ii)));
+    estMapCovRBPFmeanY(ii) = mean(diag(estCovX(Nstate + 2:3:Nstate + (3*Nmap - 1), Nstate + 2:3:Nstate + (3*Nmap - 1), ii)));
+    estMapCovRBPFmeanZ(ii) = mean(diag(estCovX(Nstate + 3:3:Nstate + (3*Nmap - 0), Nstate + 3:3:Nstate + (3*Nmap - 0), ii)));
 end
 
 %% Plotting For First MC Run
@@ -381,30 +422,39 @@ end
 subplot(3,1,1)
 title('Position Error for all Runs')
 ylabel('e_x')
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(1,1,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(1,1,:))), '-k', 'HandleVisibility', 'off')
-plot(t, squeeze(sqrt(errPoseCovRBPFsample(1,1,:))), '--b')
-plot(t, -squeeze(sqrt(errPoseCovRBPFsample(1,1,:))), '--b', 'HandleVisibility', 'off')
-plot(t, errPoseRBPFmean(1,:), 'r')
+idx = 1;
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
+plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
+plot(t, errPoseRBPFmean(idx,:), 'r')
 legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,2)
 ylabel('e_y')
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(2,2,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(2,2,:))), '-k', 'HandleVisibility', 'off')
-plot(t, squeeze(sqrt(errPoseCovRBPFsample(2,2,:))), '--b')
-plot(t, -squeeze(sqrt(errPoseCovRBPFsample(2,2,:))), '--b', 'HandleVisibility', 'off')
-plot(t, errPoseRBPFmean(2,:), 'r')
+idx = 2;
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
+plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
+plot(t, errPoseRBPFmean(idx,:), 'r')
 legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,3)
 xlabel('Time (sec)')
 ylabel('e_z')
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(3,3,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(3,3,:))), '-k', 'HandleVisibility', 'off')
-plot(t, squeeze(sqrt(errPoseCovRBPFsample(3,3,:))), '--b')
-plot(t, -squeeze(sqrt(errPoseCovRBPFsample(3,3,:))), '--b', 'HandleVisibility', 'off')
-plot(t, errPoseRBPFmean(3,:), 'r')
+idx = 3;
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
+plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
+plot(t, errPoseRBPFmean(idx,:), 'r')
 legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 
@@ -433,8 +483,10 @@ subplot(3,1,1)
 title('Velocity Error for all Runs')
 ylabel('e_x')
 idx = 4;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
@@ -443,21 +495,27 @@ legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 subplot(3,1,2)
 ylabel('e_y')
 idx = 5;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,3)
 xlabel('Time (sec)')
 ylabel('e_z')
 idx = 6;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx,idx,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx,idx,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx,idx,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 %plot the angle error for every MC run
 figure
@@ -537,30 +595,39 @@ subplot(3,1,1)
 title('Body Rate Error for all Runs')
 ylabel('e_x')
 idx = 10;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,2)
 ylabel('e_y')
 idx = 11;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 subplot(3,1,3)
 xlabel('Time (sec)')
 ylabel('e_z')
 idx = 12;
-plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
-plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
+plot(t, squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g')
+plot(t, -squeeze(sqrt(estCovX(idx+1,idx+1,:))), '--g', 'HandleVisibility', 'off')
+% plot(t, squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k')
+% plot(t, -squeeze(sqrt(estPoseCovRBPFmean(idx+1,idx+1,:))), '-k', 'HandleVisibility', 'off')
 plot(t, squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b')
 plot(t, -squeeze(sqrt(errPoseCovRBPFsample(idx,idx,:))), '--b', 'HandleVisibility', 'off')
 plot(t, errPoseRBPFmean(idx,:), 'r')
+legend('Filter 1 \sigma', 'Sample 1 \sigma', 'Mean Error')
 
 % Plot the Mapping Error for Every MC Run and Every Point
 figure
