@@ -31,6 +31,7 @@ function [xHatOut, xMMSE_l, xMMSE_n] = rbpf(sys, y, xHat, Params)
 %
 % Outputs
 % xHatOut = the state estimate at time t = k, stacked as [x_l' x_n']'
+% THIS COMMENT IS A TEST OF GIT
 
 %% Setup
 
